@@ -145,6 +145,33 @@ jobs:
       pathtoPublish: '$(Build.ArtifactStagingDirectory)'
       artifactName: 'bundle'
 
+- job: 'win_docker_build'
+  pool:
+    vmImage: 'windows-2019'
+  steps:
+  - template: 'templates/changes-include.yml'
+    parameters:
+      paths: 'go.mod go.sum Dockerfile.windows .azure-pipelines'
+  - powershell: |
+      if ("$(Build.SourceBranch)" -match "^refs/tags/v\d+\.\d+\.\d+$") {
+          $env:AGENT_VERSION = ("$(Build.SourceBranchName)").Replace("v", "")
+      } else {
+          $env:AGENT_VERSION = "latest"
+      }
+
+      docker build -t quay.io/signalfx/signalfx-agent:${env:AGENT_VERSION}-windows --build-arg AGENT_VERSION=${env:AGENT_VERSION} -f Dockerfile.windows .
+
+      # push release image
+      if ("$env:AGENT_VERSION" -ne "latest") {
+          docker login -u="$env:QUAY_USERNAME" -p="$env:QUAY_TOKEN" quay.io
+          docker push quay.io/signalfx/signalfx-agent:${env:AGENT_VERSION}-windows
+      }
+    displayName: 'Build windows docker image'
+    condition: and(ne(variables.hasChanges, 'false'), ne(variables.hasChanges, False))
+    env:
+      QUAY_USERNAME: $(quayUsername)
+      QUAY_TOKEN: $(quayToken)
+
 - job: 'win_2019_integration_tests'
   pool:
     vmImage: 'windows-2019'
